@@ -1,7 +1,11 @@
+from bs4 import BeautifulSoup
+import requests
+import urllib
+import json
+from Member import Member
+
 __author__ = 'drandhaw'
 
-from bs4 import BeautifulSoup
-import requests, urllib
 
 # GET ALL USERS #
 # Gets the /people/ sorted by debates
@@ -18,16 +22,35 @@ for page_num in range(1, 2):
     members_on_this_page = this_page_soup.find_all('div', class_='member')
     # -- Goes over all members in the page, and adds em to the set -- #
     for member in members_on_this_page:
-        member_url = root + member.find('div', class_='pic').a['href']
-        member_soup = BeautifulSoup(urllib.urlopen(member_url).read(), 'lxml')
+        member_url = member.find('div', class_='pic').a['href']
+        member_soup = BeautifulSoup(urllib.urlopen(root + member_url).read(), 'lxml')
 
+        # Extracts the info about the member #
         info_table = member_soup.find('div', id='profile').find('div', id='info').find('table').find_all('tr')
         info_dict = {}
         for row in info_table:
             info_dict[row.find('td', class_='c1').get_text()[:-1]] = row.find('td', class_='c2').get_text()
             info_dict[row.find('td', class_='c4').get_text()[:-1]] = row.find('td', class_='c5').get_text()
 
+        member_obj = Member(username=member_url.replace('/', ''), name=info_dict.get('Name'),
+                            gender=info_dict.get('Gender'), birthday=info_dict.get('Birthday'),
+                            joined=info_dict.get('Joined'), president=info_dict.get('President'),
+                            ideology=info_dict.get('Ideology'), email=info_dict.get('Email'),
+                            education=info_dict.get('Education'), party=info_dict.get('Party'),
+                            ethnicity=info_dict.get('Ethnicity'), relationship=info_dict.get('Relationship'),
+                            income=info_dict.get('Income'), occupation=info_dict.get('Occupation'),
+                            religion=info_dict.get('Religion'), interested=info_dict.get('Interested'),
+                            looking=info_dict.get('Looking'))
 
+        # Extracts member friends #
+        for friends_page_num in range(1, 11):
+            s = BeautifulSoup(urllib.urlopen(root + member_url + '/friends/' + str(friends_page_num)).read(), 'lxml')
+            for friend in s.find_all('div', class_='member'):
+                friend_url = friend.find('div', class_='username').find('div', class_='link').a.get_text()
+                member_obj.friends.add(friend_url)
+
+
+        all_members.add(member_obj)
 #
 # import requests
 # from bs4 import BeautifulSoup
