@@ -12,8 +12,6 @@ class Debate:
 class Round:
     """ Round Class --> Each round in a debate """
 
-    def __init__(self, con_user=None, pro_user=None, con_data="", pro_data=""):
-        self.con_user = con_user
-        self.pro_user = pro_user
+    def __init__(self, con_data="", pro_data=""):
         self.con_data = con_data
         self.pro_data = pro_data
