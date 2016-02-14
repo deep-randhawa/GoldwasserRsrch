@@ -47,9 +47,29 @@ for page_num in range(1, 2):
             s = BeautifulSoup(urllib.urlopen(root + member_url + '/friends/' + str(friends_page_num)).read(), 'lxml')
             for friend in s.find_all('div', class_='member'):
                 friend_url = friend.find('div', class_='username').find('div', class_='link').a.get_text()
-                member_obj.friends.add(friend_url)
+                member_obj.add_friend(friend_url)
 
+        # Extracts stats from member #
+        stats = member_soup.find('table', id='stats')
+        for i in stats.find_all('tr'):
+            if not i.find('td', class_='left'):
+                continue
+            member_obj.add_debate_stats(i.find('td', class_='left').get_text(), i.find('td', class_='right').get_text())
 
+        # Extracts issues from member #
+        issues = member_soup.find('div', id='issues').find('table')
+        for issue in issues.find_all('tr'):
+            if issue.find('td', class_='c2') and issue.find('td', class_='c3'):
+                member_obj.add_issue(issue.find('td', class_='c2').get_text(),
+                                     issue.find('td', class_='c3').get_text())
+
+        # Extracts debates from member #
+        for debate_page_num in range(1, 11):
+            debates_page = BeautifulSoup(urllib.urlopen(root + member_url + "debates/" + str(debate_page_num)), 'lxml')
+            for debate in debates_page.find_all('div', class_='debatesLong'):
+                member_obj.add_debate(debate.a['href'])
+
+        print member_obj
         all_members.add(member_obj)
 #
 # import requests
