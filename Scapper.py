@@ -3,6 +3,7 @@ import requests
 import urllib
 import json
 from Member import Member
+from Debate import Debate, Round
 
 __author__ = 'drandhaw'
 
@@ -10,64 +11,125 @@ __author__ = 'drandhaw'
 # GET ALL USERS #
 # Gets the /people/ sorted by debates
 root = 'http://www.debate.org'
-route = '/people/?order=19&sort=1'
+route_people = '/people/?order=19&sort=1'
+route_debate = '/debates/?order=4&sort=1'
 
-all_members = set()
 
-# -- Goes over 20 pages of the members, and grabs all of em -- #
-for page_num in range(1, 20):
-    this_page = urllib.urlopen(root + route + '&page=' + str(page_num)).read()
-    this_page_soup = BeautifulSoup(this_page, 'lxml')
+def get_members():
+    """
+    Goes to the top 20 pages of member listings, and get's em all
+    :return:
+    """
+    all_members = set()
+    for page_num in range(1, 20):
+        this_page = urllib.urlopen(root + route_people + '&page=' + str(page_num)).read()
+        this_page_soup = BeautifulSoup(this_page, 'lxml')
 
-    members_on_this_page = this_page_soup.find_all('div', class_='member')
-    # -- Goes over all members in the page, and adds em to the set -- #
-    for member in members_on_this_page:
-        member_url = member.find('div', class_='pic').a['href']
-        member_soup = BeautifulSoup(urllib.urlopen(root + member_url).read(), 'lxml')
+        members_on_this_page = this_page_soup.find_all('div', class_='member')
+        # -- Goes over all members in the page, and adds em to the set -- #
+        for member in members_on_this_page:
+            member_url = member.find('div', class_='pic').a['href']
+            member_soup = BeautifulSoup(urllib.urlopen(root + member_url).read(), 'lxml')
 
-        # Extracts the info about the member #
-        info_table = member_soup.find('div', id='profile').find('div', id='info').find('table').find_all('tr')
-        info_dict = {}
-        for row in info_table:
-            info_dict[row.find('td', class_='c1').get_text()[:-1]] = row.find('td', class_='c2').get_text()
-            info_dict[row.find('td', class_='c4').get_text()[:-1]] = row.find('td', class_='c5').get_text()
+            # Extracts the info about the member #
+            info_table = member_soup.find('div', id='profile').find('div', id='info').find('table').find_all('tr')
+            info_dict = {}
+            for row in info_table:
+                info_dict[row.find('td', class_='c1').get_text()[:-1]] = row.find('td', class_='c2').get_text()
+                info_dict[row.find('td', class_='c4').get_text()[:-1]] = row.find('td', class_='c5').get_text()
 
-        member_obj = Member(username=member_url.replace('/', ''), name=info_dict.get('Name'),
-                            gender=info_dict.get('Gender'), birthday=info_dict.get('Birthday'),
-                            joined=info_dict.get('Joined'), president=info_dict.get('President'),
-                            ideology=info_dict.get('Ideology'), email=info_dict.get('Email'),
-                            education=info_dict.get('Education'), party=info_dict.get('Party'),
-                            ethnicity=info_dict.get('Ethnicity'), relationship=info_dict.get('Relationship'),
-                            income=info_dict.get('Income'), occupation=info_dict.get('Occupation'),
-                            religion=info_dict.get('Religion'), interested=info_dict.get('Interested'),
-                            looking=info_dict.get('Looking'))
+            member_obj = Member(username=member_url.replace('/', ''), name=info_dict.get('Name'),
+                                gender=info_dict.get('Gender'), birthday=info_dict.get('Birthday'),
+                                joined=info_dict.get('Joined'), president=info_dict.get('President'),
+                                ideology=info_dict.get('Ideology'), email=info_dict.get('Email'),
+                                education=info_dict.get('Education'), party=info_dict.get('Party'),
+                                ethnicity=info_dict.get('Ethnicity'), relationship=info_dict.get('Relationship'),
+                                income=info_dict.get('Income'), occupation=info_dict.get('Occupation'),
+                                religion=info_dict.get('Religion'), interested=info_dict.get('Interested'),
+                                looking=info_dict.get('Looking'))
 
-        # Extracts member friends #
-        for friends_page_num in range(1, 11):
-            s = BeautifulSoup(urllib.urlopen(root + member_url + '/friends/' + str(friends_page_num)).read(), 'lxml')
-            for friend in s.find_all('div', class_='member'):
-                friend_url = friend.find('div', class_='username').find('div', class_='link').a.get_text()
-                member_obj.add_friend(friend_url)
+            # Extracts member friends #
+            for friends_page_num in range(1, 11):
+                s = BeautifulSoup(urllib.urlopen(root + member_url + '/friends/' + str(friends_page_num)).read(),
+                                  'lxml')
+                for friend in s.find_all('div', class_='member'):
+                    friend_url = friend.find('div', class_='username').find('div', class_='link').a.get_text()
+                    member_obj.add_friend(friend_url)
 
-        # Extracts stats from member #
-        stats = member_soup.find('table', id='stats')
-        for i in stats.find_all('tr'):
-            if not i.find('td', class_='left'):
-                continue
-            member_obj.add_debate_stats(i.find('td', class_='left').get_text(), i.find('td', class_='right').get_text())
+            # Extracts stats from member #
+            stats = member_soup.find('table', id='stats')
+            for i in stats.find_all('tr'):
+                if not i.find('td', class_='left'):
+                    continue
+                member_obj.add_debate_stats(i.find('td', class_='left').get_text(),
+                                            i.find('td', class_='right').get_text())
 
-        # Extracts issues from member #
-        issues = member_soup.find('div', id='issues').find('table')
-        for issue in issues.find_all('tr'):
-            if issue.find('td', class_='c2') and issue.find('td', class_='c3'):
-                member_obj.add_issue(issue.find('td', class_='c2').get_text(),
-                                     issue.find('td', class_='c3').get_text())
+            # Extracts issues from member #
+            issues = member_soup.find('div', id='issues').find('table')
+            for issue in issues.find_all('tr'):
+                if issue.find('td', class_='c2') and issue.find('td', class_='c3'):
+                    member_obj.add_issue(issue.find('td', class_='c2').get_text(),
+                                         issue.find('td', class_='c3').get_text())
 
-        # Extracts debates from member #
-        for debate_page_num in range(1, 11):
-            debates_page = BeautifulSoup(urllib.urlopen(root + member_url + "debates/" + str(debate_page_num)), 'lxml')
-            for debate in debates_page.find_all('div', class_='debatesLong'):
-                member_obj.add_debate(debate.a['href'])
+            # Extracts debates from member #
+            for debate_page_num in range(1, 11):
+                debates_page = BeautifulSoup(urllib.urlopen(root + member_url + "debates/" + str(debate_page_num)),
+                                             'lxml')
+                for debate in debates_page.find_all('div', class_='debatesLong'):
+                    member_obj.add_debate(debate.a['href'])
+            all_members.add(member_obj)
+    return all_members
 
-        print member_obj
-        all_members.add(member_obj)
+
+def get_debates():
+    """
+    Goes to the top 20 pages of debate listings, and get's em all
+    :return:
+    """
+    all_debates = set()
+
+    for page_num in range(1, 2):
+        this_page = urllib.urlopen(root + route_debate + '&page=' + str(page_num)).read()
+        this_page_soup = BeautifulSoup(this_page, 'lxml')
+
+        debates_on_this_page = this_page_soup.find_all('div', class_='debatesLong')
+
+        for debate in debates_on_this_page:
+            link = debate.a['href']
+            debate = BeautifulSoup(urllib.urlopen(root + link).read(), 'lxml').find('div', id='debate')
+            title = debate.find('h1', class_='top').get_text()
+
+            pro_member = debate.find('div', id='instigatorWrap').find('div', class_='un').get_text()
+            con_member = debate.find('div', id='contenderWrap').find('div', class_='un').get_text()
+
+            params_table = debate.find('table', id='parameters')
+            params_dict = {}
+            for row in params_table.find_all('tr'):
+                try:
+                    params_dict[row.find('td', class_='c1').get_text().replace(':', '')] = row.find('td',
+                                                                                                    class_='c2').get_text()
+                    params_dict[row.find('td', class_='c3').get_text().replace(':', '')] = row.find('td',
+                                                                                                    class_='c4').get_text()
+                except AttributeError:
+                    continue
+
+            debate_obj = Debate(title=title, link=link, debate_no=params_dict['Debate No'],
+                                category=params_dict['Category'], pro_member=pro_member, con_member=con_member,
+                                started=params_dict['Started'], viewed=params_dict['Viewed'])
+
+            round_soup = debate.find('table', id='rounds')
+            for round_num in range(1, 5):
+                try:
+                    metadict = {}
+                    pro_con_data = round_soup.find('tr', id='round' + str(round_num)).find_all('div',
+                                                                                               class_='round-inner')
+                    metadict['pro'] = pro_con_data[0].get_text()
+                    metadict['con'] = pro_con_data[1].get_text()
+                    debate_obj.add_round(Round(con_data=metadict['con'], pro_data=metadict['pro']))
+                except AttributeError:
+                    continue
+            all_debates.add(debate_obj)
+    return all_debates
+
+
+get_debates()
