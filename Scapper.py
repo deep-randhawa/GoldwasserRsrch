@@ -1,7 +1,8 @@
-from bs4 import BeautifulSoup
-import requests
 import urllib
-import json
+import re
+
+from bs4 import BeautifulSoup
+
 from Member import Member
 from Debate import Debate, Round
 
@@ -126,8 +127,13 @@ def get_debates_on_topic(topic, num_pages):
                         metadict = {}
                         pro_con_data = round_soup.find('tr', id='round' + str(round_num)).find_all('div',
                                                                                                    class_='round-inner')
-                        metadict['pro'] = pro_con_data[0].get_text()
-                        metadict['con'] = pro_con_data[1].get_text()
+                        # USE REGEX to find pro and con parts
+                        if re.compile('(\n)*Pro').match(pro_con_data[0].get_text()) is not None:
+                            metadict['pro'] = pro_con_data[0].get_text()
+                            metadict['con'] = pro_con_data[1].get_text()
+                        else:
+                            metadict['pro'] = pro_con_data[1].get_text()
+                            metadict['con'] = pro_con_data[0].get_text()
                         debate_obj.add_round(Round(con_data=metadict['con'], pro_data=metadict['pro']))
                     except AttributeError:
                         continue
@@ -136,6 +142,8 @@ def get_debates_on_topic(topic, num_pages):
                 print debate_obj.title
                 all_debates_with_this_topic.add(debate_obj)
         except AttributeError:
+            continue
+        except IndexError:
             continue
     return all_debates_with_this_topic
 
@@ -182,8 +190,13 @@ def get_debates():
                     metadict = {}
                     pro_con_data = round_soup.find('tr', id='round' + str(round_num)).find_all('div',
                                                                                                class_='round-inner')
-                    metadict['pro'] = pro_con_data[0].get_text()
-                    metadict['con'] = pro_con_data[1].get_text()
+                    if re.compile('(\n)*Pro').match(pro_con_data[0].get_text()) is not None:
+                        metadict['pro'] = pro_con_data[0].get_text()
+                        metadict['con'] = pro_con_data[1].get_text()
+                    else:
+                        metadict['pro'] = pro_con_data[1].get_text()
+                        metadict['con'] = pro_con_data[0].get_text()
+                    debate_obj.add_round(Round(con_data=metadict['con'], pro_data=metadict['pro']))
                     debate_obj.add_round(Round(con_data=metadict['con'], pro_data=metadict['pro']))
                 except AttributeError:
                     continue
