@@ -81,6 +81,65 @@ def get_members():
     return all_members
 
 
+def get_debates_on_topic(topic, num_pages):
+    """
+    Gets all the debates on a particular topic.
+    Searches the topic in debates search page, and gets the debate
+    from the search results
+    :param topic:
+    :return:
+    """
+    all_debates_with_this_topic = set()
+    for page_num in range(1, num_pages):
+        try:
+            URL = root + '/search?q=' + topic + '&f=debate' + '&p=' + str(page_num)
+            this_page_soup = BeautifulSoup(urllib.urlopen(URL).read(), 'lxml')
+
+            debates_on_this_page = this_page_soup.find('ol', id='search-results')
+            for debate_num in debates_on_this_page.find_all('li', class_='debate'):
+                link = debate_num.a['href']
+
+                debate = BeautifulSoup(urllib.urlopen(root + link).read(), 'lxml').find('div', id='debate')
+                title = debate.find('h1', class_='top').get_text()
+
+                pro_member = debate.find('div', id='instigatorWrap').find('div', class_='un').get_text()
+                con_member = debate.find('div', id='contenderWrap').find('div', class_='un').get_text()
+
+                params_table = debate.find('table', id='parameters')
+                params_dict = {}
+                for row in params_table.find_all('tr'):
+                    try:
+                        params_dict[row.find('td', class_='c1').get_text().replace(':', '')] = row.find('td',
+                                                                                                        class_='c2').get_text()
+                        params_dict[row.find('td', class_='c3').get_text().replace(':', '')] = row.find('td',
+                                                                                                        class_='c4').get_text()
+                    except AttributeError:
+                        continue
+
+                debate_obj = Debate(title=title, link=link, debate_no=params_dict['Debate No'],
+                                    category=params_dict['Category'], pro_member=pro_member, con_member=con_member,
+                                    started=params_dict['Started'], viewed=params_dict['Viewed'])
+
+                round_soup = debate.find('table', id='rounds')
+                for round_num in range(1, 5):
+                    try:
+                        metadict = {}
+                        pro_con_data = round_soup.find('tr', id='round' + str(round_num)).find_all('div',
+                                                                                                   class_='round-inner')
+                        metadict['pro'] = pro_con_data[0].get_text()
+                        metadict['con'] = pro_con_data[1].get_text()
+                        debate_obj.add_round(Round(con_data=metadict['con'], pro_data=metadict['pro']))
+                    except AttributeError:
+                        continue
+                    except IndexError:
+                        continue
+                print debate_obj.title
+                all_debates_with_this_topic.add(debate_obj)
+        except AttributeError:
+            continue
+    return all_debates_with_this_topic
+
+
 def get_debates():
     """
     Goes to the top 20 pages of debate listings, and get's em all
@@ -88,7 +147,7 @@ def get_debates():
     """
     all_debates = set()
 
-    for page_num in range(1, 2):
+    for page_num in range(1, 200):
         this_page = urllib.urlopen(root + route_debate + '&page=' + str(page_num)).read()
         this_page_soup = BeautifulSoup(this_page, 'lxml')
 
@@ -128,8 +187,12 @@ def get_debates():
                     debate_obj.add_round(Round(con_data=metadict['con'], pro_data=metadict['pro']))
                 except AttributeError:
                     continue
+                except IndexError:
+                    continue
             all_debates.add(debate_obj)
     return all_debates
 
 
+get_debates_on_topic('abortion', 50)
 get_debates()
+print get_debates()
