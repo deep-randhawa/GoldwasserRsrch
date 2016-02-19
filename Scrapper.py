@@ -206,6 +206,4 @@ def get_debates():
     return all_debates
 
 
-get_debates_on_topic('abortion', 50)
-get_debates()
-print get_debates()
+abortion_debates = get_debates_on_topic('abortion', 50)
