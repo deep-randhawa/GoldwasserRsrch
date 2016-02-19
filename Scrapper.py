@@ -206,4 +206,35 @@ def get_debates():
     return all_debates
 
 
-abortion_debates = get_debates_on_topic('abortion', 50)
+def write_debates_to_file(file_name, delete_old_data, all_debates):
+    """
+
+    :param file_name:
+    :param delete_old_data: boolean variable, if the file is new or not
+    :param all_debates: an array of objects, like debates to write to file
+    :return:
+    """
+    file = None
+    if delete_old_data:
+        file = open(file_name, 'w')
+    else:
+        file = open(file_name, 'a')
+
+    for debate in all_debates:
+        file.write(debate.title)
+        file.write(debate.link)
+        file.write(debate.debate_no)
+        file.write(debate.category)
+        file.write(debate.pro_member)
+        file.write(debate.con_member)
+        file.write(debate.started)
+        file.write(debate.viewed)
+        for round in debate.rounds:
+            file.write(round.pro_data)
+            file.write('\n')
+            file.write(round.con_data)
+    file.close()
+
+
+abortion_debates = get_debates_on_topic('abortion', 5)
+# write_debates_to_file('debates.txt', True, abortion_debates)
