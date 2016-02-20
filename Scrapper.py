@@ -1,10 +1,12 @@
 import urllib
 import re
-
+import json
+import pickle
 from bs4 import BeautifulSoup
+from simplejson import JSONEncoder
 
 from Member import Member
-from Debate import Debate, Round
+from Debate import Debate, _Round
 
 __author__ = 'drandhaw'
 
@@ -16,13 +18,14 @@ route_people = '/people/?order=19&sort=1'
 route_debate = '/debates/?order=4&sort=1'
 
 
-def get_members():
+def get_members(num_pages=20):
     """
     Goes to the top 20 pages of member listings, and get's em all
+    :param num_pages:
     :return:
     """
     all_members = set()
-    for page_num in range(1, 20):
+    for page_num in range(1, num_pages):
         this_page = urllib.urlopen(root + route_people + '&page=' + str(page_num)).read()
         this_page_soup = BeautifulSoup(this_page, 'lxml')
 
@@ -78,6 +81,7 @@ def get_members():
                                              'lxml')
                 for debate in debates_page.find_all('div', class_='debatesLong'):
                     member_obj.add_debate(debate.a['href'])
+            print member_obj.username
             all_members.add(member_obj)
     return all_members
 
@@ -87,6 +91,7 @@ def get_debates_on_topic(topic, num_pages):
     Gets all the debates on a particular topic.
     Searches the topic in debates search page, and gets the debate
     from the search results
+    :param num_pages:
     :param topic:
     :return:
     """
@@ -134,7 +139,7 @@ def get_debates_on_topic(topic, num_pages):
                         else:
                             metadict['pro'] = pro_con_data[1].get_text()
                             metadict['con'] = pro_con_data[0].get_text()
-                        debate_obj.add_round(Round(con_data=metadict['con'], pro_data=metadict['pro']))
+                        debate_obj.add_round(_Round(con_data=metadict['con'], pro_data=metadict['pro']))
                     except AttributeError:
                         continue
                     except IndexError:
@@ -196,8 +201,8 @@ def get_debates():
                     else:
                         metadict['pro'] = pro_con_data[1].get_text()
                         metadict['con'] = pro_con_data[0].get_text()
-                    debate_obj.add_round(Round(con_data=metadict['con'], pro_data=metadict['pro']))
-                    debate_obj.add_round(Round(con_data=metadict['con'], pro_data=metadict['pro']))
+                    debate_obj.add_round(_Round(con_data=metadict['con'], pro_data=metadict['pro']))
+                    debate_obj.add_round(_Round(con_data=metadict['con'], pro_data=metadict['pro']))
                 except AttributeError:
                     continue
                 except IndexError:
@@ -206,35 +211,67 @@ def get_debates():
     return all_debates
 
 
-def write_debates_to_file(file_name, delete_old_data, all_debates):
+def read_from_file(file_name):
     """
-
+    Reads objects from files
     :param file_name:
-    :param delete_old_data: boolean variable, if the file is new or not
-    :param all_debates: an array of objects, like debates to write to file
     :return:
     """
-    file = None
-    if delete_old_data:
-        file = open(file_name, 'w')
-    else:
-        file = open(file_name, 'a')
-
-    for debate in all_debates:
-        file.write(debate.title)
-        file.write(debate.link)
-        file.write(debate.debate_no)
-        file.write(debate.category)
-        file.write(debate.pro_member)
-        file.write(debate.con_member)
-        file.write(debate.started)
-        file.write(debate.viewed)
-        for round in debate.rounds:
-            file.write(round.pro_data)
-            file.write('\n')
-            file.write(round.con_data)
-    file.close()
+    debates = set()
+    with open(file_name, 'r') as input_file:
+        data = input_file.read()
+        for json_obj in data.split('\n'):
+            try:
+                debates.add(Debate.load_from_json(json.loads(json_obj)))
+            except ValueError:
+                print json_obj
+    return debates
 
 
-abortion_debates = get_debates_on_topic('abortion', 5)
-# write_debates_to_file('debates.txt', True, abortion_debates)
+class _DebatesEncoder(JSONEncoder):
+    def default(self, o):
+        """
+        JSONEncoder for Debates
+        :param o:
+        :return:
+        """
+        return o.__dict__
+
+
+class _MemberEncoder(JSONEncoder):
+    def default(self, o):
+        """
+        JSONEncoder for Members
+        :param o:
+        :return:
+        """
+        _dict = {}
+        for k, v in o.__dict__.iteritems():
+            if isinstance(v, set):
+                _dict[k] = list(v)
+            else:
+                _dict[k] = v
+        return _dict
+
+
+def write_to_file(objects, file_name, json_encoder, truncate_old_file=True):
+    """
+    Writes the stuff to file
+    :param objects: stuff that you want to write to file. an array of objects
+    :param file_name:
+    :param truncate_old_file: boolean value. Give True for new files
+    :param json_encoder: json_encoder class, that makes the
+    :return:
+    """
+    mode = 'w' if truncate_old_file else 'a'
+    with open(file_name, mode=mode) as output_file:
+        for obj in objects:
+            json.dump(obj, output_file, cls=json_encoder)
+            output_file.write('\n')
+
+
+abortion_debates = get_debates_on_topic('abortion', 350)
+write_to_file(abortion_debates, 'abortion_debates.txt', _DebatesEncoder, True)
+debates = read_from_file('abortion_debates.txt')
+members = get_members(3500)
+write_to_file(members, 'all_members.txt', json_encoder=_MemberEncoder)
