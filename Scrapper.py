@@ -1,12 +1,15 @@
 import urllib
 import re
 import json
-import pickle
+
 from bs4 import BeautifulSoup
+
 from simplejson import JSONEncoder
 
 from Member import Member
 from Debate import Debate, _Round
+
+from sortedcontainers import SortedSet
 
 __author__ = 'drandhaw'
 
@@ -24,7 +27,7 @@ def get_members(num_pages=20):
     :param num_pages:
     :return:
     """
-    all_members = set()
+    all_members = SortedSet()
     for page_num in range(1, num_pages):
         this_page = urllib.urlopen(root + route_people + '&page=' + str(page_num)).read()
         this_page_soup = BeautifulSoup(this_page, 'lxml')
@@ -83,6 +86,8 @@ def get_members(num_pages=20):
                     member_obj.add_debate(debate.a['href'])
             print member_obj.username
             all_members.add(member_obj)
+            if len(all_members) % 10 == 0:
+                write_to_file(list(all_members[:-10]), 'all_members.txt', _MemberEncoder, False)
     return all_members
 
 
@@ -211,7 +216,7 @@ def get_debates():
     return all_debates
 
 
-def read_from_file(file_name):
+def read_debates_from_file(file_name):
     """
     Reads objects from files
     :param file_name:
@@ -259,7 +264,8 @@ def write_to_file(objects, file_name, json_encoder, truncate_old_file=True):
     Writes the stuff to file
     :param objects: stuff that you want to write to file. an array of objects
     :param file_name:
-    :param truncate_old_file: boolean value. Give True for new files
+    :param truncate_old_file: boolean value. False appends to previously created files,
+                                True creates new file, and deletes old data
     :param json_encoder: json_encoder class, that makes the
     :return:
     """
@@ -268,10 +274,11 @@ def write_to_file(objects, file_name, json_encoder, truncate_old_file=True):
         for obj in objects:
             json.dump(obj, output_file, cls=json_encoder)
             output_file.write('\n')
+            output_file.flush()
 
 
-abortion_debates = get_debates_on_topic('abortion', 350)
-write_to_file(abortion_debates, 'abortion_debates.txt', _DebatesEncoder, True)
-debates = read_from_file('abortion_debates.txt')
-members = get_members(3500)
-write_to_file(members, 'all_members.txt', json_encoder=_MemberEncoder)
+# abortion_debates = get_debates_on_topic('abortion', 350)
+# write_to_file(abortion_debates, 'abortion_debates.txt', _DebatesEncoder, True)
+# debates = read_from_file('abortion_debates.txt')
+# members = get_members(350)
+# write_to_file(members, 'all_members.txt', json_encoder=_MemberEncoder)
