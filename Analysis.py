@@ -6,6 +6,8 @@ from nltk import word_tokenize
 
 from Scrapper import read_debates_from_file
 
+import svmlight
+
 __author__ = 'drandhaw'
 
 chars = '~`!@#$%^&*()_-+={}|:"<>?,./;[]\\\''
@@ -39,12 +41,19 @@ def set_up_train_and_test_files():
     max_con_value = 1
     max_pro_value = 1
 
-    lines = []
+    train_lines = []
+    test_lines = []
     j = 1
-    for debate in list(debates)[:-2000]:
+
+    train_debates = list(debates)[:5]
+    test_debates = list(debates)[6:7]
+
+    for debate in train_debates:
+        print j
+        j += 1
         for round in debate.rounds:
-            svm_pro_line = '1'
-            svm_con_line = '-1'
+            svm_pro_target = tuple()
+            svm_con_target = tuple()
 
             # Prep pro data for SVM_Light
             for word in word_tokenize(round.pro_data):
@@ -63,7 +72,7 @@ def set_up_train_and_test_files():
 
             for k, v in sorted(pro_data_dict.items(), key=operator.itemgetter(1)):
                 if counter[k] != 0:
-                    svm_pro_line += ' ' + str(pro_data_dict[k]) + ':' + str(counter[k] / float(len(round.pro_data)))
+                    svm_pro_target += (pro_data_dict[k], counter[k] / float(len(round.pro_data)))
 
             # Prep con data for SVM_Light
             for word in word_tokenize(round.con_data):
@@ -82,17 +91,71 @@ def set_up_train_and_test_files():
 
             for k, v in sorted(con_data_dict.items(), key=operator.itemgetter(1)):
                 if counter[k] != 0:
-                    svm_con_line += ' ' + str(con_data_dict[k]) + ':' + str(counter[k] / float(len(round.con_data)))
+                    svm_con_target += (con_data_dict[k], counter[k] / float(len(round.con_data)))
 
-            print j
-            j += 1
             # print svm_con_line
             # print svm_pro_line
 
-            lines.append(svm_con_line)
-            lines.append(svm_pro_line)
-    write_lines_to_file('train.data', lines)
+            train_lines.append((-1, svm_con_target))
+            train_lines.append((1, svm_pro_target))
+    # write_lines_to_file('train.data', train_lines)
+
+    for debate in test_debates:
+        print j
+        j += 1
+        for round in debate.rounds:
+            svm_pro_target = '1'
+            svm_con_target = '-1'
+
+            # Prep pro data for SVM_Light
+            for word in word_tokenize(round.pro_data):
+                word = word.lower()
+                for i in chars:
+                    word = word.replace(i, '')
+                for i in positions:
+                    word = word.replace(i, '')
+                if word.isdigit() \
+                        or re.compile('www.*').match(word) is not None:
+                    continue
+                if word not in pro_data_dict:
+                    pro_data_dict[word] = max_pro_value
+                    max_pro_value += 1
+            counter = Counter(word_tokenize(round.pro_data))
+
+            for k, v in sorted(pro_data_dict.items(), key=operator.itemgetter(1)):
+                if counter[k] != 0:
+                    svm_pro_target += (pro_data_dict[k], counter[k] / float(len(round.pro_data)))
+
+            # Prep con data for SVM_Light
+            for word in word_tokenize(round.con_data):
+                word = word.lower()
+                for i in chars:
+                    word = word.replace(i, '')
+                for i in positions:
+                    word = word.replace(i, '')
+                if word.replace('.', '').isdigit() \
+                        or re.compile('www.*').match(word) is not None:
+                    continue
+                if word not in con_data_dict:
+                    con_data_dict[word] = max_con_value
+                    max_con_value += 1
+            counter = Counter(word_tokenize(round.con_data))
+
+            for k, v in sorted(con_data_dict.items(), key=operator.itemgetter(1)):
+                if counter[k] != 0:
+                    svm_con_target += (con_data_dict[k], counter[k] / float(len(round.con_data)))
+
+            # print svm_con_line
+            # print svm_pro_line
+
+            test_lines.append(svm_con_target)
+            test_lines.append(svm_pro_target)
+    write_lines_to_file('test.data', test_lines)
+    return train_lines, test_lines
 
 
 if __name__ == "__main__":
-    set_up_train_and_test_files()
+    # set_up_train_and_test_files()
+    train_data, test_data = set_up_train_and_test_files()
+    model = svmlight.learn(train_data)
+    svmlight.classify(model, test_data)
