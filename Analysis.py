@@ -1,10 +1,12 @@
 from collections import Counter
 import re
 import operator
-import numpy as np
+import random
 
 from nltk import word_tokenize
 from nltk.corpus import stopwords
+
+from sklearn import svm
 
 from Scrapper import read_debates_from_file
 
@@ -47,18 +49,28 @@ def set_up_train_and_test_files(train_dataset_size=100, test_dataset_size=100):
     train_lines = []
     test_lines = []
 
-    train_debates = list(debates)[0:train_dataset_size]
-    test_debates = list(debates)[train_dataset_size + 1:train_dataset_size + test_dataset_size]
+    frequency_words_train_data = {}
+
+    # shuffles the data randomly, so we don't get
+    # the same data point every time
+    debates = list(debates)
+    random.shuffle(debates)
+
+    train_debates = debates[0:train_dataset_size]
+    test_debates = debates[train_dataset_size + 1:train_dataset_size + test_dataset_size]
 
     # SETS UP TRAINING DATA FILE
+    iteration = 0
     for debate in train_debates:
-        print len(train_lines)
+        print iteration
+        iteration += 1
         for round in debate.rounds:
             svm_pro_target = '1'
             svm_con_target = '-1'
 
             # Prep pro data for SVM_Light
             for word in word_tokenize(round.pro_data):
+                if word == '': continue
                 word = word.lower()
                 for i in chars or i in positions:
                     word = word.replace(i, '')
@@ -68,6 +80,12 @@ def set_up_train_and_test_files(train_dataset_size=100, test_dataset_size=100):
                 if word not in pro_data_dict and word not in stop_words:
                     pro_data_dict[word] = max_pro_value
                     max_pro_value += 1
+
+                # increases the frequency count of word
+                if word in frequency_words_train_data.keys():
+                    frequency_words_train_data[word] += 1
+                else:
+                    frequency_words_train_data[word] = 1
             counter = Counter(word_tokenize(round.pro_data))
 
             # Writing PRO data in format to train file
@@ -77,6 +95,7 @@ def set_up_train_and_test_files(train_dataset_size=100, test_dataset_size=100):
 
             # Prep con data for SVM_Light
             for word in word_tokenize(round.con_data):
+                if word == '': continue
                 word = word.lower()
                 for i in chars or i in positions:
                     word = word.replace(i, '')
@@ -86,6 +105,12 @@ def set_up_train_and_test_files(train_dataset_size=100, test_dataset_size=100):
                 if word not in con_data_dict and word not in stop_words:
                     con_data_dict[word] = max_con_value
                     max_con_value += 1
+
+                # increases the frequency count of word
+                if word in frequency_words_train_data.keys():
+                    frequency_words_train_data[word] += 1
+                else:
+                    frequency_words_train_data[word] = 1
             counter = Counter(word_tokenize(round.con_data))
 
             # Writing CON data in format to train file
@@ -100,14 +125,17 @@ def set_up_train_and_test_files(train_dataset_size=100, test_dataset_size=100):
             train_lines.append(svm_pro_target)
 
     # SETS UP TEST DATA FILE
+    iteration = 0
     for debate in test_debates:
-        print len(test_lines)
+        print iteration
+        iteration += 1
         for round in debate.rounds:
             svm_pro_target = '1'
             svm_con_target = '-1'
 
             # Prep pro data for SVM_Light
             for word in word_tokenize(round.pro_data):
+                if word == '': continue
                 word = word.lower()
                 for i in chars or i in positions:
                     word = word.replace(i, '')
@@ -126,6 +154,7 @@ def set_up_train_and_test_files(train_dataset_size=100, test_dataset_size=100):
 
             # Prep con data for SVM_Light
             for word in word_tokenize(round.con_data):
+                if word == '': continue
                 word = word.lower()
                 for i in chars or i in positions:
                     word = word.replace(i, '')
@@ -142,12 +171,20 @@ def set_up_train_and_test_files(train_dataset_size=100, test_dataset_size=100):
                 if counter[k] != 0:
                     svm_con_target += ' ' + str(con_data_dict[k]) + ':' + str(counter[k] / float(len(round.con_data)))
 
-            # print svm_con_line
-            # print svm_pro_line
-
             test_lines.append(svm_con_target)
             test_lines.append(svm_pro_target)
     return train_lines, test_lines
+
+
+def get_features_with_most_frequency(total_feature_set, num_features):
+    """
+    Selects the top num_features from the total_feature_set
+    and returns it
+    Format of input is the same as
+    :param total_feature_set:
+    :param num_features:
+    :return:
+    """
 
 
 def get_data_in_sklearn_svm_format(train_data, test_data):
@@ -201,8 +238,15 @@ def get_data_in_sklearn_svm_format(train_data, test_data):
 
 
 if __name__ == "__main__":
-    # set_up_train_and_test_files()
-    train, test = set_up_train_and_test_files(10, 10)
-    # os.system('svm_learn train.data model')
-    # os.system('svm_classify test.data model target.predict')
-    get_data_in_sklearn_svm_format(train, test)
+    train, test = set_up_train_and_test_files(100, 100)
+    train_features, train_targets, test_features, test_targets = get_data_in_sklearn_svm_format(train, test)
+
+    clf = svm.SVC()
+    clf.fit(train_features, train_targets)
+
+    predict = clf.predict(test_features)
+    total_correct = 0
+    for i in range(len(predict)):
+        if predict[i] == test_targets[i]:
+            total_correct += 1
+    print total_correct / float(len(predict))
