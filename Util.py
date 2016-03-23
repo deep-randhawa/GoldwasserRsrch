@@ -3,6 +3,7 @@ import re
 import operator
 import random
 import argparse
+import os
 
 from nltk import word_tokenize
 from nltk.corpus import stopwords
@@ -30,6 +31,10 @@ def write_lines_to_file(filename, lines=[]):
             output_file.write(line)
             output_file.write('\n')
 
+
+def cleanup_files():
+    os.remove('train.data')
+    os.remove('test.data')
 
 def set_up_train_and_test_files(train_dataset_size=100, test_dataset_size=100):
     """
@@ -62,7 +67,7 @@ def set_up_train_and_test_files(train_dataset_size=100, test_dataset_size=100):
     test_debates = debates[train_dataset_size + 1:train_dataset_size + test_dataset_size]
 
     # SETS UP TRAINING DATA FILE
-    print 'Training ...'
+    print 'Setting up training data...'
     for debate in train_debates:
         for round in debate.rounds:
             svm_pro_target = '1'

@@ -27,9 +27,13 @@ if __name__ == "__main__":
     clf = svm.SVC()
     clf.fit(train_features, train_targets)
 
+    
+    print 'Predicting on test data ...'
     predict = clf.predict(test_features)
     total_correct = 0
     for i in range(len(predict)):
         if predict[i] == test_targets[i]:
             total_correct += 1
     print 'Accuracy=' + str(total_correct / float(len(predict)))
+
+    cleanup_files()
