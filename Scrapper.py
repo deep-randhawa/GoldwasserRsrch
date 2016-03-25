@@ -188,46 +188,7 @@ def get_debates():
 
         for debate in debates_on_this_page:
             link = debate.a['href']
-            debate = BeautifulSoup(urllib.urlopen(root + link).read(), 'lxml').find('div', id='debate')
-            title = debate.find('h1', class_='top').get_text()
-
-            pro_member = debate.find('div', id='instigatorWrap').find('div', class_='un').get_text()
-            con_member = debate.find('div', id='contenderWrap').find('div', class_='un').get_text()
-
-            params_table = debate.find('table', id='parameters')
-            params_dict = {}
-            for row in params_table.find_all('tr'):
-                try:
-                    params_dict[row.find('td', class_='c1').get_text().replace(':', '')] = row.find('td',
-                                                                                                    class_='c2').get_text()
-                    params_dict[row.find('td', class_='c3').get_text().replace(':', '')] = row.find('td',
-                                                                                                    class_='c4').get_text()
-                except AttributeError:
-                    continue
-
-            debate_obj = Debate(title=title, link=link, debate_no=params_dict['Debate No'],
-                                category=params_dict['Category'], pro_member=pro_member, con_member=con_member,
-                                started=params_dict['Started'], viewed=params_dict['Viewed'])
-
-            round_soup = debate.find('table', id='rounds')
-            for round_num in range(1, 5):
-                try:
-                    metadict = {}
-                    pro_con_data = round_soup.find('tr', id='round' + str(round_num)).find_all('div',
-                                                                                               class_='round-inner')
-                    if re.compile('(\n)*Pro').match(pro_con_data[0].get_text()) is not None:
-                        metadict['pro'] = pro_con_data[0].get_text()
-                        metadict['con'] = pro_con_data[1].get_text()
-                    else:
-                        metadict['pro'] = pro_con_data[1].get_text()
-                        metadict['con'] = pro_con_data[0].get_text()
-                    debate_obj.add_round(_Round(con_data=metadict['con'], pro_data=metadict['pro']))
-                    debate_obj.add_round(_Round(con_data=metadict['con'], pro_data=metadict['pro']))
-                except AttributeError:
-                    continue
-                except IndexError:
-                    continue
-            all_debates.add(debate_obj)
+            all_debates.add(get_debate_with_url(link))
     return all_debates
 
 

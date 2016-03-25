@@ -33,30 +33,78 @@ def write_lines_to_file(filename, lines=[]):
 
 
 def cleanup_files():
-    os.remove('train.data')
-    os.remove('test.data')
+    try:
+        os.remove('train.data')
+        os.remove('test.data')
+    except OSError:
+        pass
 
-def set_up_train_and_test_files(train_dataset_size=100, test_dataset_size=100):
+
+def most_common_features(dataset, num_words):
+    """
+    Gets the :param num_words most frequent words
+    from the given :param dataset.
+    Does not include stop words
+    :param dataset:
+    :param num_words:
+    :return: list of most common features
+    """
+    final_counter = Counter()
+    for x in dataset:
+        words_in_x = []
+        for word in word_tokenize(x):
+            word = word.lower()
+            for i in chars:
+                word = word.replace(i, '')
+            for i in positions:
+                word = word.replace(i, '')
+            if word.isdigit() or re.compile('www.*').match(word) is not None \
+                    or word not in stopwords.words('english') or len(word) <= 2:
+                continue
+            words_in_x.append(word)
+        final_counter += Counter(words_in_x)
+    return dict(final_counter.most_common(num_words)).keys()
+
+
+def find_freq_of_features(data, features):
+    """
+    Finds the frequency of most common features in this
+    data
+    :param data:
+    :param features:
+    :return: dict
+    """
+    freq_features = dict.fromkeys(features, 0)
+    for word in word_tokenize(data):
+        if word in features:
+            freq_features[word] += 1
+    return freq_features
+
+
+def map_features_to_dict(features):
+    feature_dict = {}
+    tmp_num = 1
+    for k in features:
+        feature_dict[k] = tmp_num
+        tmp_num += 1
+    return feature_dict
+
+
+def set_up_train_and_test_files(train_dataset_size=100, test_dataset_size=100, num_features=50):
     """
     Adds data to train and test files,
     that conforms to the SVM_Light
+    :param num_features: number of most frequent words to consider
     :param test_dataset_size:
     :param train_dataset_size:
     :return:
     """
     debates = read_debates_from_file('abortion_debates.txt')
-    stop_words = stopwords.words('english')
 
-    con_data_dict = {}
-    pro_data_dict = {}
-
-    max_con_value = 1
-    max_pro_value = 1
-
-    train_lines = []
-    test_lines = []
-
-    frequency_words_train_data = {}
+    train_features = []
+    train_targets = []
+    test_features = []
+    test_targets = []
 
     # shuffles the data randomly, so we don't get
     # the same data point every time
@@ -68,124 +116,52 @@ def set_up_train_and_test_files(train_dataset_size=100, test_dataset_size=100):
 
     # SETS UP TRAINING DATA FILE
     print 'Setting up training data...'
+    frequency_words = most_common_features([y.con_data for x in train_debates for y in x.rounds] +
+                                           [y.pro_data for x in train_debates for y in x.rounds] +
+                                           [y.con_data for x in test_debates for y in x.rounds] +
+                                           [y.pro_data for x in test_debates for y in x.rounds],
+                                           num_features)
+
+    freq_mapped_indices = map_features_to_dict(frequency_words)
+
     for debate in train_debates:
         for round in debate.rounds:
-            svm_pro_target = '1'
-            svm_con_target = '-1'
+            pro_features = [0] * len(freq_mapped_indices)
+            con_features = [0] * len(freq_mapped_indices)
 
             # Prep pro data for SVM_Light
-            for word in word_tokenize(round.pro_data):
-                if word == '': continue
-                word = word.lower()
-                for i in chars or i in positions:
-                    word = word.replace(i, '')
-                if word.isdigit() \
-                        or re.compile('www.*').match(word) is not None:
-                    continue
-                if word not in pro_data_dict and word not in stop_words:
-                    pro_data_dict[word] = max_pro_value
-                    max_pro_value += 1
-
-                # increases the frequency count of word
-                if word in frequency_words_train_data.keys():
-                    frequency_words_train_data[word] += 1
-                else:
-                    frequency_words_train_data[word] = 1
-            counter = Counter(word_tokenize(round.pro_data))
-
-            # Writing PRO data in format to train file
-            for k, v in sorted(pro_data_dict.items(), key=operator.itemgetter(1)):
-                if counter[k] != 0:
-                    svm_pro_target += ' ' + str(pro_data_dict[k]) + ':' + str(counter[k] / float(len(round.pro_data)))
+            train_targets.append(1)
+            counter_pro = find_freq_of_features(round.pro_data, frequency_words)
+            for k, v in counter_pro.items():
+                pro_features[freq_mapped_indices[k] - 1] = counter_pro[k] / float(num_features)
+            train_features.append(pro_features)
 
             # Prep con data for SVM_Light
-            for word in word_tokenize(round.con_data):
-                if word == '': continue
-                word = word.lower()
-                for i in chars or i in positions:
-                    word = word.replace(i, '')
-                if word.replace('.', '').isdigit() \
-                        or re.compile('www.*').match(word) is not None:
-                    continue
-                if word not in con_data_dict and word not in stop_words:
-                    con_data_dict[word] = max_con_value
-                    max_con_value += 1
-
-                # increases the frequency count of word
-                if word in frequency_words_train_data.keys():
-                    frequency_words_train_data[word] += 1
-                else:
-                    frequency_words_train_data[word] = 1
-            counter = Counter(word_tokenize(round.con_data))
-
-            # Writing CON data in format to train file
-            for k, v in sorted(con_data_dict.items(), key=operator.itemgetter(1)):
-                if counter[k] != 0:
-                    svm_con_target += ' ' + str(con_data_dict[k]) + ':' + str(counter[k] / float(len(round.con_data)))
-
-            # print svm_con_line
-            # print svm_pro_line
-
-            train_lines.append(svm_con_target)
-            train_lines.append(svm_pro_target)
+            train_targets.append(-1)
+            counter_con = find_freq_of_features(round.con_data, frequency_words)
+            for k, v in counter_con.items():
+                con_features[freq_mapped_indices[k] - 1] = counter_con[k] / float(num_features)
+            train_features.append(con_features)
 
     for debate in test_debates:
         for round in debate.rounds:
-            svm_pro_target = '1'
-            svm_con_target = '-1'
+            pro_features = [0] * len(freq_mapped_indices)
+            con_features = [0] * len(freq_mapped_indices)
 
             # Prep pro data for SVM_Light
-            for word in word_tokenize(round.pro_data):
-                if word == '': continue
-                word = word.lower()
-                for i in chars or i in positions:
-                    word = word.replace(i, '')
-                if word.isdigit() \
-                        or re.compile('www.*').match(word) is not None:
-                    continue
-                if word not in pro_data_dict and word not in stop_words:
-                    pro_data_dict[word] = max_pro_value
-                    max_pro_value += 1
-            counter = Counter(word_tokenize(round.pro_data))
-
-            # Writing PRO data in format to test file
-            for k, v in sorted(pro_data_dict.items(), key=operator.itemgetter(1)):
-                if counter[k] != 0:
-                    svm_pro_target += ' ' + str(pro_data_dict[k]) + ':' + str(counter[k] / float(len(round.pro_data)))
+            test_targets.append(1)
+            counter_pro = find_freq_of_features(round.pro_data, frequency_words)
+            for k, v in counter_pro.items():
+                pro_features[freq_mapped_indices[k] - 1] = counter_pro[k] / float(num_features)
+            test_features.append(pro_features)
 
             # Prep con data for SVM_Light
-            for word in word_tokenize(round.con_data):
-                if word == '': continue
-                word = word.lower()
-                for i in chars or i in positions:
-                    word = word.replace(i, '')
-                if word.replace('.', '').isdigit() \
-                        or re.compile('www.*').match(word) is not None:
-                    continue
-                if word not in con_data_dict and word not in stop_words:
-                    con_data_dict[word] = max_con_value
-                    max_con_value += 1
-            counter = Counter(word_tokenize(round.con_data))
-
-            # Writing CON1 data in format to test file
-            for k, v in sorted(con_data_dict.items(), key=operator.itemgetter(1)):
-                if counter[k] != 0:
-                    svm_con_target += ' ' + str(con_data_dict[k]) + ':' + str(counter[k] / float(len(round.con_data)))
-
-            test_lines.append(svm_con_target)
-            test_lines.append(svm_pro_target)
-    return train_lines, test_lines
-
-
-def get_features_with_most_frequency(total_feature_set, num_features):
-    """
-    Selects the top num_features from the total_feature_set
-    and returns it
-    Format of input is the same as
-    :param total_feature_set:
-    :param num_features:
-    :return:
-    """
+            test_targets.append(-1)
+            counter_con = find_freq_of_features(round.con_data, frequency_words)
+            for k, v in counter_con.items():
+                con_features[freq_mapped_indices[k] - 1] = counter_con[k] / float(num_features)
+            test_features.append(con_features)
+    return train_features, train_targets, test_features, test_targets
 
 
 def get_data_in_sklearn_svm_format(train_data, test_data):

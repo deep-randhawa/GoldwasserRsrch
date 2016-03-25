@@ -1,39 +1,40 @@
-from collections import Counter
-import re
-import operator
-import random
-import argparse
-
-from nltk import word_tokenize
-from nltk.corpus import stopwords
-
-from sklearn import svm
-
-from Scrapper import read_debates_from_file
 from Util import *
+from sklearn import tree
 
 __author__ = 'drandhaw'
 
-
 parser = argparse.ArgumentParser()
-parser.add_argument('-tr', '--trainsetsize', required=True, default=100, type=int, help='Number of data points to use for training')
-parser.add_argument('-tt', '--testsetsize', required=True, default=100, type=int, help='Number of data points to use for testing')
+parser.add_argument('-tr', '--trainsetsize', required=False, default=100, type=int, help='# of data points for training')
+parser.add_argument('-tt', '--testsetsize', required=False, default=100, type=int, help='# of data points for testing')
+parser.add_argument('-nf', '--numfeatures', required=False, default=100, type=int,
+                    help='# of most frequent features to consider')
 args = vars(parser.parse_args())
 
 if __name__ == "__main__":
-    train, test = set_up_train_and_test_files(args['trainsetsize'], args['testsetsize'])
-    train_features, train_targets, test_features, test_targets = get_data_in_sklearn_svm_format(train, test)
+    train_features, train_targets, test_features, test_targets = set_up_train_and_test_files(args['trainsetsize'],
+                                                                                             args['testsetsize'],
+                                                                                             args['numfeatures'])
 
-    clf = svm.SVC()
-    clf.fit(train_features, train_targets)
-
-    
     print 'Predicting on test data ...'
-    predict = clf.predict(test_features)
+
+    clfsvm = svm.SVC()
+    clfsvm.fit(train_features, train_targets)
+
+    predictions = clfsvm.predict(test_features)
     total_correct = 0
-    for i in range(len(predict)):
-        if predict[i] == test_targets[i]:
+    for i in range(len(predictions)):
+        if predictions[i] == test_targets[i]:
             total_correct += 1
-    print 'Accuracy=' + str(total_correct / float(len(predict)))
+    print 'Accuracy w/ SVM=' + str(total_correct / float(len(predictions)))
+
+    clfdecisiontree = tree.DecisionTreeClassifier()
+    clfdecisiontree = clfdecisiontree.fit(train_features, train_targets)
+
+    total_correct = 0
+    predictions = clfdecisiontree.predict(test_features)
+    for i in range(len(predictions)):
+        if predictions[i] == test_targets[i]:
+            total_correct += 1
+    print 'Accuracy w/ Decision Tree=' + str(total_correct / float(len(predictions)))
 
     cleanup_files()
