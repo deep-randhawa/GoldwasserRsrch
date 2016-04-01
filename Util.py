@@ -1,17 +1,29 @@
 from collections import Counter
-import re
-import operator
 import random
-import argparse
 import os
 
 from nltk import word_tokenize
+
 from nltk.corpus import stopwords
+from nltk import FreqDist
 
-from sklearn import svm
+import pickle
+import itertools
+from random import shuffle
 
-from Scrapper import read_debates_from_file
-from Util import *
+import nltk
+from nltk.collocations import BigramCollocationFinder
+from nltk.metrics import BigramAssocMeasures
+from nltk.probability import FreqDist, ConditionalFreqDist
+
+import sklearn
+from sklearn.svm import SVC, LinearSVC, NuSVC
+from sklearn.naive_bayes import GaussianNB, MultinomialNB, BernoulliNB
+from sklearn.linear_model import LogisticRegression
+from nltk.classify.scikitlearn import SklearnClassifier
+from sklearn.metrics import accuracy_score
+
+from Scrapper import *
 
 __author__ = 'drandhaw'
 
@@ -40,6 +52,18 @@ def cleanup_files():
         pass
 
 
+# 2.1 Use all words as features
+def bag_of_words(words):
+    return dict([(word, True) for word in words])
+
+
+# 2.2 Use bigrams as features (use chi square chose top 200 bigrams)
+def bigrams(words, score_fn=BigramAssocMeasures.chi_sq, n=200):
+    bigram_finder = BigramCollocationFinder.from_words(words)
+    bigrams = bigram_finder.nbest(score_fn, n)
+    return bag_of_words(bigrams)
+
+
 def most_common_features(dataset, num_words):
     """
     Gets the :param num_words most frequent words
@@ -49,21 +73,18 @@ def most_common_features(dataset, num_words):
     :param num_words:
     :return: list of most common features
     """
-    final_counter = Counter()
+    words_in_x = []
     for x in dataset:
-        words_in_x = []
         for word in word_tokenize(x):
             word = word.lower()
-            for i in chars:
-                word = word.replace(i, '')
-            for i in positions:
+            for i in chars or i in positions:
                 word = word.replace(i, '')
             if word.isdigit() or re.compile('www.*').match(word) is not None \
-                    or word not in stopwords.words('english') or len(word) <= 2:
+                    or word in stopwords.words('english') or len(word) <= 2:
                 continue
             words_in_x.append(word)
-        final_counter += Counter(words_in_x)
-    return dict(final_counter.most_common(num_words)).keys()
+    fd = FreqDist(words_in_x)
+    return dict(fd.most_common(num_words)).keys()
 
 
 def find_freq_of_features(data, features):
