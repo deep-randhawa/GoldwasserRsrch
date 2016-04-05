@@ -1,27 +1,12 @@
-from collections import Counter
 import random
 import os
 
 from nltk import word_tokenize
-
 from nltk.corpus import stopwords
-from nltk import FreqDist
+from nltk.probability import FreqDist
+from nltk import BigramCollocationFinder, BigramAssocMeasures
 
-import pickle
 import itertools
-from random import shuffle
-
-import nltk
-from nltk.collocations import BigramCollocationFinder
-from nltk.metrics import BigramAssocMeasures
-from nltk.probability import FreqDist, ConditionalFreqDist
-
-import sklearn
-from sklearn.svm import SVC, LinearSVC, NuSVC
-from sklearn.naive_bayes import GaussianNB, MultinomialNB, BernoulliNB
-from sklearn.linear_model import LogisticRegression
-from nltk.classify.scikitlearn import SklearnClassifier
-from sklearn.metrics import accuracy_score
 
 from Scrapper import *
 
@@ -29,6 +14,7 @@ __author__ = 'drandhaw'
 
 chars = '~`!@#$%^&*()_-+={}|:"<>?,./;[]\\\''
 positions = ['nd', 'rd', 'th']
+stop_words = stopwords.words('english')
 
 
 def write_lines_to_file(filename, lines=[]):
@@ -52,19 +38,37 @@ def cleanup_files():
         pass
 
 
-# 2.1 Use all words as features
-def bag_of_words(words):
-    return dict([(word, True) for word in words])
+def is_feature_relevant(feature):
+    """
+    Checks is the feature should be considered or not
+    :param feature:
+    :return:
+    """
+    if type(feature) is not str and type(feature) is not unicode:
+        return False
+    feature = feature.lower()
+    for i in chars:
+        feature = feature.replace(i, '')
+    for i in positions:
+        feature = feature.replace(i, '')
+    if feature.isdigit() or re.compile('www.*').match(feature) is not None \
+            or feature in stop_words or len(feature) <= 2:
+        return False
+    return True
 
 
-# 2.2 Use bigrams as features (use chi square chose top 200 bigrams)
-def bigrams(words, score_fn=BigramAssocMeasures.chi_sq, n=200):
-    bigram_finder = BigramCollocationFinder.from_words(words)
-    bigrams = bigram_finder.nbest(score_fn, n)
-    return bag_of_words(bigrams)
+def most_common_bigrams(all_words, num_bigrams):
+    bigram_finder = BigramCollocationFinder.from_words(all_words)
+    bigram_freq = dict(bigram_finder.ngram_fd.viewitems())
+    for k, v in bigram_freq.items():
+        if not is_feature_relevant(k[0]) or not is_feature_relevant(k[1]):
+            del bigram_freq[k]
+
+    fd =  FreqDist(bigram_freq)
+    return dict(fd.most_common(num_bigrams)).keys()
 
 
-def most_common_features(dataset, num_words):
+def most_common_single_features(all_words, num_words):
     """
     Gets the :param num_words most frequent words
     from the given :param dataset.
@@ -74,20 +78,14 @@ def most_common_features(dataset, num_words):
     :return: list of most common features
     """
     words_in_x = []
-    for x in dataset:
-        for word in word_tokenize(x):
-            word = word.lower()
-            for i in chars or i in positions:
-                word = word.replace(i, '')
-            if word.isdigit() or re.compile('www.*').match(word) is not None \
-                    or word in stopwords.words('english') or len(word) <= 2:
-                continue
+    for word in all_words:
+        if is_feature_relevant(word):
             words_in_x.append(word)
     fd = FreqDist(words_in_x)
     return dict(fd.most_common(num_words)).keys()
 
 
-def find_freq_of_features(data, features):
+def find_freq_of_features(local_features, imp_feature_set):
     """
     Finds the frequency of most common features in this
     data
@@ -95,11 +93,17 @@ def find_freq_of_features(data, features):
     :param features:
     :return: dict
     """
-    freq_features = dict.fromkeys(features, 0)
-    for word in word_tokenize(data):
-        if word in features:
-            freq_features[word] += 1
-    return freq_features
+    local_bigram_features = dict(BigramCollocationFinder.from_words(local_features).ngram_fd.viewitems())
+    local_freq_features = dict.fromkeys(imp_feature_set, 0)
+    for word in local_features:
+        if word in imp_feature_set:
+            local_freq_features[word] += 1
+
+    for bigram in local_bigram_features:
+        if bigram in imp_feature_set:
+            local_freq_features[bigram] = local_bigram_features[bigram]
+
+    return local_freq_features
 
 
 def map_features_to_dict(features):
@@ -111,78 +115,70 @@ def map_features_to_dict(features):
     return feature_dict
 
 
-def set_up_train_and_test_files(train_dataset_size=100, test_dataset_size=100, num_features=50):
+def shuffle_data(features, targets, size_train=0.75, size_test=0.25):
+    """
+    Shuffles a set of features and targets,
+    :returns train_features, train_targets, test_features, test_targets
+    """
+    combined = zip(features, targets)
+    random.shuffle(combined)
+    shuffled_features, shuffled_targets = zip(*combined)
+    train_features = shuffled_features[:int(len(shuffled_features) * size_train)]
+    train_targets = shuffled_targets[:int(len(shuffled_features) * size_train)]
+    test_features = shuffled_features[int(len(shuffled_features) * size_test * -1):]
+    test_targets = shuffled_targets[int(len(shuffled_features) * size_test * -1):]
+    return train_features, train_targets, test_features, test_targets
+
+
+def get_features_and_targets(num_features=50, size=200):
     """
     Adds data to train and test files,
     that conforms to the SVM_Light
+    :param size: total #debates to consider, including training and test
     :param num_features: number of most frequent words to consider
-    :param test_dataset_size:
-    :param train_dataset_size:
     :return:
     """
-    debates = read_debates_from_file('abortion_debates.txt')
-
-    train_features = []
-    train_targets = []
-    test_features = []
-    test_targets = []
+    debates = list(read_debates_from_file('abortion_debates.txt'))
+    features = []
+    targets = []
 
     # shuffles the data randomly, so we don't get
     # the same data point every time
-    debates = list(debates)
     random.shuffle(debates)
-
-    train_debates = debates[0:train_dataset_size]
-    test_debates = debates[train_dataset_size + 1:train_dataset_size + test_dataset_size]
+    debates = debates[0:size]
 
     # SETS UP TRAINING DATA FILE
     print 'Setting up training data...'
-    frequency_words = most_common_features([y.con_data for x in train_debates for y in x.rounds] +
-                                           [y.pro_data for x in train_debates for y in x.rounds] +
-                                           [y.con_data for x in test_debates for y in x.rounds] +
-                                           [y.pro_data for x in test_debates for y in x.rounds],
-                                           num_features)
+    all_words = [y.con_data for x in debates for y in x.rounds] + \
+                [y.pro_data for x in debates for y in x.rounds]
+    all_words = list(itertools.chain(*([word_tokenize(x) for x in all_words])))
 
-    freq_mapped_indices = map_features_to_dict(frequency_words)
+    frequent_single_features = most_common_single_features(all_words, num_features)
+    frequent_bigrams = most_common_bigrams(all_words, num_features * 10)
 
-    for debate in train_debates:
+    all_features = frequent_single_features + frequent_bigrams
+
+    freq_mapped_indices = map_features_to_dict(all_features)
+
+    for debate in debates:
         for round in debate.rounds:
             pro_features = [0] * len(freq_mapped_indices)
             con_features = [0] * len(freq_mapped_indices)
 
-            # Prep pro data for SVM_Light
-            train_targets.append(1)
-            counter_pro = find_freq_of_features(round.pro_data, frequency_words)
+            # Prep pro data
+            targets.append(1)
+            counter_pro = find_freq_of_features(word_tokenize(round.pro_data), all_features)
             for k, v in counter_pro.items():
                 pro_features[freq_mapped_indices[k] - 1] = counter_pro[k] / float(num_features)
-            train_features.append(pro_features)
+            features.append(pro_features)
 
-            # Prep con data for SVM_Light
-            train_targets.append(-1)
-            counter_con = find_freq_of_features(round.con_data, frequency_words)
+            # Prep con data
+            targets.append(-1)
+            counter_con = find_freq_of_features(word_tokenize(round.con_data), all_features)
             for k, v in counter_con.items():
                 con_features[freq_mapped_indices[k] - 1] = counter_con[k] / float(num_features)
-            train_features.append(con_features)
-
-    for debate in test_debates:
-        for round in debate.rounds:
-            pro_features = [0] * len(freq_mapped_indices)
-            con_features = [0] * len(freq_mapped_indices)
-
-            # Prep pro data for SVM_Light
-            test_targets.append(1)
-            counter_pro = find_freq_of_features(round.pro_data, frequency_words)
-            for k, v in counter_pro.items():
-                pro_features[freq_mapped_indices[k] - 1] = counter_pro[k] / float(num_features)
-            test_features.append(pro_features)
-
-            # Prep con data for SVM_Light
-            test_targets.append(-1)
-            counter_con = find_freq_of_features(round.con_data, frequency_words)
-            for k, v in counter_con.items():
-                con_features[freq_mapped_indices[k] - 1] = counter_con[k] / float(num_features)
-            test_features.append(con_features)
-    return train_features, train_targets, test_features, test_targets
+            features.append(con_features)
+    return features, targets
 
 
 def get_data_in_sklearn_svm_format(train_data, test_data):
