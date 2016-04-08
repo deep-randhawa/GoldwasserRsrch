@@ -1,17 +1,14 @@
 import urllib
-import sys
 import re
 import json
 import sys
 
 from bs4 import BeautifulSoup
-
 from simplejson import JSONEncoder
+from sortedcontainers import SortedSet
 
 from Member import Member
 from Debate import Debate, _Round
-
-from sortedcontainers import SortedSet
 
 __author__ = 'drandhaw'
 
@@ -264,9 +261,3 @@ def write_to_file(objects, file_name, json_encoder, truncate_old_file=True):
             json.dump(obj, output_file, cls=json_encoder)
             output_file.write('\n')
             output_file.flush()
-
-# abortion_debates = get_debates_on_topic('abortion', 350)
-# write_to_file(abortion_debates, 'abortion_debates.txt', _DebatesEncoder, True)
-# debates = read_from_file('abortion_debates.txt')
-# members = get_members(350)
-# write_to_file(members, 'all_members.txt', json_encoder=_MemberEncoder)
