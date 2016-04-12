@@ -1,12 +1,11 @@
 import random
 import os
+import itertools
 
-from nltk import word_tokenize
 from nltk.corpus import stopwords
 from nltk.probability import FreqDist
-from nltk import BigramCollocationFinder, BigramAssocMeasures
-
-import itertools
+from nltk import BigramCollocationFinder
+from nltk import word_tokenize
 
 from Scrapper import *
 
@@ -64,7 +63,7 @@ def most_common_bigrams(all_words, num_bigrams):
         if not is_feature_relevant(k[0]) or not is_feature_relevant(k[1]):
             del bigram_freq[k]
 
-    fd =  FreqDist(bigram_freq)
+    fd = FreqDist(bigram_freq)
     return dict(fd.most_common(num_bigrams)).keys()
 
 
@@ -89,9 +88,6 @@ def find_freq_of_features(local_features, imp_feature_set):
     """
     Finds the frequency of most common features in this
     data
-    :param data:
-    :param features:
-    :return: dict
     """
     local_bigram_features = dict(BigramCollocationFinder.from_words(local_features).ngram_fd.viewitems())
     local_freq_features = dict.fromkeys(imp_feature_set, 0)
@@ -144,8 +140,7 @@ def get_features_and_targets(num_features=50, size=200):
 
     # shuffles the data randomly, so we don't get
     # the same data point every time
-    random.shuffle(debates)
-    debates = debates[0:size]
+    debates = random.sample(debates, size)
 
     # SETS UP TRAINING DATA FILE
     print 'Setting up training data...'
@@ -180,52 +175,3 @@ def get_features_and_targets(num_features=50, size=200):
             features.append(con_features)
     return features, targets
 
-
-def get_data_in_sklearn_svm_format(train_data, test_data):
-    """
-    :param train_data:
-    :param test_data:
-    :return train_features, train_targets, test_features, test_targets
-    """
-    sklearn_train_features = []
-    sklearn_train_targets = []
-    sklearn_test_features = []
-    sklearn_test_targets = []
-
-    # Set up train data
-    for single_feature_set in train_data:
-        single_feature_set = single_feature_set.split(' ')
-        sklearn_train_targets.append(single_feature_set[0])
-        tmp_value_set = []
-        for feature_value in single_feature_set[1:]:
-            feature = int(feature_value.split(':')[0])
-            value = float(feature_value.split(':')[1])
-            while len(tmp_value_set) != feature + 1:
-                tmp_value_set.append(0)
-            tmp_value_set[feature] = value
-        sklearn_train_features.append(tmp_value_set)
-
-    # Set up test data
-    for single_feature_set in test_data:
-        single_feature_set = single_feature_set.split(' ')
-        sklearn_test_targets.append(single_feature_set[0])
-        tmp_value_set = []
-        for feature_value in single_feature_set[1:]:
-            feature = int(feature_value.split(':')[0])
-            value = float(feature_value.split(':')[1])
-            while len(tmp_value_set) != feature + 1:
-                tmp_value_set.append(0)
-            tmp_value_set[feature] = value
-        sklearn_test_features.append(tmp_value_set)
-
-    # Matching matrix size of all items
-    max_length = max(len(max(sklearn_train_features, key=len)), len(max(sklearn_test_features, key=len)))
-    for j in range(len(sklearn_train_features)):
-        if len(sklearn_train_features[j]) < max_length:
-            sklearn_train_features[j] = sklearn_train_features[j] + (max_length - len(sklearn_train_features[j])) * [0]
-
-    for i in range(len(sklearn_test_features)):
-        if len(sklearn_test_features[i]) < max_length:
-            sklearn_test_features[i] = sklearn_test_features[i] + (max_length - len(sklearn_test_features[i])) * [0]
-
-    return sklearn_train_features, sklearn_train_targets, sklearn_test_features, sklearn_test_targets

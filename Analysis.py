@@ -36,6 +36,7 @@ def analyse_data():
             if predictions[j] == test_targets[j]:
                 total_correct += 1
         svm_accuracy.append(total_correct / float(len(predictions)))
+        # print 'SVM score:', clfsvm.score(test_features, test_targets)
 
         clfdecisiontree = tree.DecisionTreeClassifier()
         clfdecisiontree = clfdecisiontree.fit(train_features, train_targets)
@@ -53,7 +54,7 @@ def analyse_data():
 
 
 if __name__ == "__main__":
-    analyse_data()
+    # analyse_data()
     # debates = list(read_debates_from_file('abortion_debates.txt'))[:200]
     # dataset = [y.con_data for x in debates for y in x.rounds] + [y.pro_data for x in debates for y in x.rounds]
     # all_words = list(itertools.chain(*([word_tokenize(x) for x in dataset])))
@@ -67,5 +68,4 @@ if __name__ == "__main__":
     #         del bigram_freq[k]
     #
     # bigram_freq = sorted(bigram_freq.items(), key=operator.itemgetter(1), reverse=True)
-
     pass
